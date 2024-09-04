@@ -1,0 +1,8 @@
+/target
+/trace
+*.cyclone
+*.trace
+*.smt2
+*.interp
+*.tokens
+*.log

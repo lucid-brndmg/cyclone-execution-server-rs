@@ -1,0 +1,29 @@
+[package]
+name = "cyclone-execution-server-rs"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+dunce = "1.0.5"
+poem = "3.0.4"
+rand = "0.8.5"
+rfd = "0.14.1"
+serde = { version = "1.0", features = ["derive"] }
+tokio = { version = "1.40.0", features = ["rt-multi-thread", "macros", "process", "fs", "sync"] }
+serde_json = "1.0.127"
+antlr-rust = "0.3.0-beta"
+regex = "1.10.6"
+tracing-subscriber = "0.3.18"
+tracing = "0.1.40"
+tracing-appender = "0.2.3"
+gumdrop = "0.8.1"
+open = "5.3.0"
+
+[profile.release]
+strip = true
+lto = true
+codegen-units = 1
+opt-level = "z"  # Optimize for size.
+# panic = "abort"
