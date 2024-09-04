@@ -4,9 +4,9 @@ A rust implementation of Cyclone Execution Server for [cyclone-online-editor](ht
 
 ## Introduction
 
-The goal of this project is to provide a native, portable, easy to use and high performance version of the code execution agent for Cyclone to let users easily connect their local Cyclone instance to the [online code editor](https://cyclone.cs.nuim.ie). This server is compatible with most of the configuration specification of the [original Node.js version](https://github.com/lucid-brndmg/cyclone-online-editor#execution-server).
+The goal of this project is to provide a native, portable, easy to use and high performance version of the code execution agent for Cyclone to let users easily connect their local Cyclone instance to the [online code editor](https://cyclone.cs.nuim.ie). 
 
-There are slight differences in server configurations (especially in `logger` section), which would be mentioned later. 
+This server is compatible with most of the configuration specification of the [original Node.js version](https://github.com/lucid-brndmg/cyclone-online-editor#execution-server). However, there are slight differences. See [here](#config-file) for more.
 
 ### Limitations
 Currently, there's no plan to support [queue (async) mode execution](https://github.com/lucid-brndmg/cyclone-online-editor?tab=readme-ov-file#execution-modes).
@@ -24,6 +24,10 @@ Normally, after startup, a browser instance will be launched and a window would 
 Click "Save" to connect to editor. Under certain situations, if the browser window didn't launch automatically, execution server can be manually set in settings menu of tutorial or editor page: 
 
 ![Settings Menu](screenshots/popover.png)
+
+Some browsers or browser plugins might block requests to the server. If failed to send network requests, try to disable AdGuard or shields (brave browser) and try again:
+
+![Disable Shield](screenshots/shield.png)
 
 ### API
 

@@ -20,12 +20,11 @@ use crate::parse::cycloneparservisitor::CycloneParserVisitor;
 const CYCLONE_ENTRY_EXTENSION: &str = "jar";
 const CYCLONE_VERSION_KEYWORD: &str = "cyclone";
 
-pub fn locate_cyclone_entry(specified_location: Option<&str>, is_allow_dialog: bool, executable_file: &str) -> Option<PathBuf> {
+pub fn locate_cyclone_entry(specified_location: Option<PathBuf>, is_allow_dialog: bool, executable_file: &str) -> Option<PathBuf> {
     let real_location = match specified_location {
         Some(location) => {
-            let p = PathBuf::from(location);
-            if p.is_dir() {
-                match fs::read_dir(p) {
+            if location.is_dir() {
+                match fs::read_dir(location) {
                     Ok(dir) => {
                         let mut r = None;
                         for entry in dir {
@@ -40,8 +39,8 @@ pub fn locate_cyclone_entry(specified_location: Option<&str>, is_allow_dialog: b
                     }
                     Err(_) => None
                 }
-            } else if p.is_file() {
-                Some(p)
+            } else if location.is_file() {
+                Some(location)
             } else {
                 None
             }

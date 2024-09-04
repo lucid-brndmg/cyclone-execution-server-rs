@@ -370,8 +370,8 @@ impl Config {
 
     pub fn prepare_cyclone_env(&self) -> PathBuf {
         let executable = locate_cyclone_entry(
-            if self.cyclone.path.is_empty() { None }
-            else {Some(&self.cyclone.path)},
+            if self.cyclone.path.is_empty() { env::current_dir().ok() }
+            else {Some(PathBuf::from(&self.cyclone.path))},
             !self.cyclone.silence_mode,
             if self.cyclone.executable.is_empty() { DEFAULT_CYCLONE_FILE } else { &self.cyclone.executable }
         ).expect("Failed to locate a valid Cyclone instance");
