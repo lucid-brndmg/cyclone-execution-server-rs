@@ -87,7 +87,6 @@ pub fn fetch_cyclone_version(location: &Path) -> Option<(String, String)> {
 
 pub fn prepare_cyclone_env(path_to_cyclone_executable: &Path) -> Result<(), env::JoinPathsError> {
     if let Some(path) = env::var_os("PATH") {
-
         let mut paths = env::split_paths(&path).collect::<Vec<_>>();
         match path_to_cyclone_executable.parent() {
             Some(p) => {
@@ -95,6 +94,13 @@ pub fn prepare_cyclone_env(path_to_cyclone_executable: &Path) -> Result<(), env:
                 paths.push(dir);
                 let new_path = env::join_paths(paths)?;
                 unsafe {env::set_var("PATH", &new_path);}
+
+                // see https://classicwuhao.github.io/cyclone_tutorial/instructions.html
+                match env::consts::OS {
+                    "linux" => unsafe {env::set_var("LD_LIBRARY_PATH", &dir);},
+                    "macos" => unsafe {env::set_var("DYLD_LIBRARY_PATH", &dir);},
+                    _ => {}
+                }
             }
             None => {}
         }
