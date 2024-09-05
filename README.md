@@ -4,24 +4,31 @@ A rust implementation of Cyclone Execution Server for [cyclone-online-editor](ht
 
 ## Introduction
 
-The goal of this project is to provide a native, portable, easy to use and high performance version of the code execution agent for Cyclone to let users easily connect their local Cyclone instance to the [online code editor](https://cyclone.cs.nuim.ie). 
+The goal of this project is to provide a native, portable, easy to use and high performance version of the code execution agent for Cyclone to let users easily connect their local Cyclone instance to the [online code editor](https://cyclone.cs.nuim.ie).
 
-This server is compatible with most of the configuration specification of the [original Node.js version](https://github.com/lucid-brndmg/cyclone-online-editor#execution-server). However, there are slight differences. See [here](#config-file) for more.
+This server is directly built upon [hyper](https://hyper.rs/) and [tokio](https://tokio.rs/) hence it is light and very fast.
 
 ### Limitations
 Currently, there's no plan to support [queue (async) mode execution](https://github.com/lucid-brndmg/cyclone-online-editor?tab=readme-ov-file#execution-modes).
 
 ## Usage
 
-Download the latest version from release page, and start the server under the default configuration. To select a Cyclone instance, either put the binary file under Cyclone's root directory (where `cyclone.jar` locates), or manually select a `cyclone.jar` file after the file selection dialog popped up. 
+~~Download the latest version from release page,~~ Manually [build](#building-from-source) a release version, and start the server under the default configuration. To select a Cyclone instance, either put the binary file under Cyclone's root directory (where `cyclone.jar` locates), or manually select a `cyclone.jar` file after the file selection dialog popped up. 
 
 ### Connecting to Editor
 
-Normally, after startup, a browser instance will be launched and a window would be popped to confirm the server address:
+After startup, a short message will be shown:
+
+```
+* Connect to online editor: open a browser and visit:
+*        https://cyclone.cs.nuim.ie/editor?set_exec_server=http%3A%2F%2F127.0.0.1%3A9000
+```
+
+Open the browser and visit the corresponding address to connect to this local server. After visiting this URL, a modal would be popped:
 
 ![Execution Server Modal](screenshots/modal.png)
 
-Click "Save" to connect to editor. Under certain situations, if the browser window didn't launch automatically, execution server can be manually set in settings menu of tutorial or editor page: 
+Click "Save" to connect to editor. Under certain situations, if the modal isn't shown automatically, execution server can also be manually set in settings menu of tutorial or editor page: 
 
 ![Settings Menu](screenshots/popover.png)
 
@@ -37,9 +44,15 @@ This project implemented server information `GET /` and synchronous execution `P
 
 Configuration of the server can be adjusted using command line, JSON file or `.env` file. During startup, the server will first (try to) load the JSON file, then read `.env` and environment variables, finally read the command line arguments.
 
+This server is compatible with most of the configuration specification of the [original Node.js version](https://github.com/lucid-brndmg/cyclone-online-editor#execution-server). However, there are slight differences.
+
 #### Command Line Arguments
 
-Some configuration options are available by using command line arguments. Use `--help` to see those options.
+Some configuration options are available by using command line arguments. Use `--help` to see those options. To specify a Cyclone instance, just use the following command:
+
+```shell
+./cyclone-execution-server-rs /path/to/cyclone.jar
+```
 
 #### Config File
 
@@ -191,7 +204,7 @@ The default configurations are made for users to use at a local environment. How
 
 ### Building From Source
 
-To build this project from source, use:
+To build this project from source, install Rust environment and use:
 ```shell
 cargo build --release
 ```

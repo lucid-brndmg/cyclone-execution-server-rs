@@ -5,77 +5,105 @@ mod environment;
 mod execution;
 mod parse;
 mod cli;
+mod handler;
 
+use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::Duration;
-use poem::{get, handler, listener::TcpListener, web::{Json, Data}, Route, Server, middleware::AddData, EndpointExt, post};
-use poem::http::Method;
-use poem::listener::Listener;
-use poem::middleware::Cors;
-use serde::{Deserialize};
-use tracing::{error, info, warn};
+use bytes::Bytes;
+use http_body_util::{BodyExt, Full, Empty};
+use hyper::{header, body::Incoming, Request, Response, StatusCode, Method};
+use hyper::header::HeaderValue;
+use hyper::service::service_fn;
+use hyper_util::rt::TokioIo;
+use tracing::{debug, error, info, warn};
+use hyper::server::conn::http1;
+use serde::Serialize;
+use tokio::net::TcpListener;
 use crate::cli::CliArgs;
-use crate::cyclone::{is_valid_program, ValidationResult};
-use crate::environment::{Environment, EnvironmentSummary};
-use crate::execution::{ExecutionOutput, ExecutionStatus};
-use crate::response::{RESP_CODE_EXECUTION_TIMEOUT, RESP_CODE_INVALID_OPTIONS, RESP_CODE_SYNTAX_ERROR, RESP_CODE_UNSUCCESSFUL_EXECUTION, ResponseOf};
+use crate::environment::{Environment};
+use crate::handler::{handle_exec, handle_server_info};
+use crate::response::{RESP_JSON_INTERNAL_ERROR};
 
-const CENSOR_REPLACEMENT: &str = "<censored-path>";
 const EDITOR_URL: &str = "https://cyclone.cs.nuim.ie/editor";
 const REPO_URL: &str = "https://github.com/lucid-brndmg/cyclone-execution-server-rs";
+// const ERROR_JSON: &str = concat!("{\"code\":", RESP_CODE_INTERNAL_ERROR, "}"); // format!("{{\"code\":{RESP_CODE_INTERNAL_ERROR}}}");
 
-#[derive(Debug, Deserialize)]
-struct ExecutionRequest {
-    program: String
+static NOTFOUND: &[u8] = b"Not Found";
+
+type GenericError = Box<dyn std::error::Error + Send + Sync>;
+type Result<T> = std::result::Result<T, GenericError>;
+type BoxBody = http_body_util::combinators::BoxBody<Bytes, hyper::Error>;
+
+fn full<T: Into<Bytes>>(chunk: T) -> BoxBody {
+    Full::new(chunk.into())
+        .map_err(|never| match never {})
+        .boxed()
 }
 
-#[handler]
-fn server_info(env: Data<&Arc<Environment>>) -> Json<ResponseOf<EnvironmentSummary>> {
-    // format!("hello: {}", name)
-    info!("Request at /");
-    Json(ResponseOf::success(env.summary.clone()))
+fn empty() -> BoxBody {
+    Empty::<Bytes>::new()
+        .map_err(|never| match never {})
+        .boxed()
 }
 
-#[handler]
-async fn exec(req: Json<ExecutionRequest>, env: Data<&Arc<Environment>>) -> Json<ResponseOf<ExecutionOutput>> {
-    info!("Request at /exec");
-    let disabled_options = &env.config.cyclone.disabled_options;
-    let program = &req.program;
-    match {
-        if env.config.cyclone.disable_syntax_check { ValidationResult::Valid }
-        else { is_valid_program(program, disabled_options) }
-    } {
-        ValidationResult::InvalidOption => Json(ResponseOf::non_success(RESP_CODE_INVALID_OPTIONS)),
-        ValidationResult::SyntaxError => Json(ResponseOf::non_success(RESP_CODE_SYNTAX_ERROR)),
-        ValidationResult::Valid => {
-            if let Some(result) = env.perform_execution(program).await {
-                if let Some(mut out) = result.output {
-                    if env.config.cyclone.censor_system_paths {
-                        out.result = env.censor_regex.replace_all(&out.result, CENSOR_REPLACEMENT).to_string();
-                        if let Some(trace) = out.trace {
-                            out.trace = Some(env.censor_regex.replace_all(&trace, CENSOR_REPLACEMENT).to_string())
-                        }
+fn build_cors_resp(req: &Request<Incoming>) -> hyper::http::response::Builder {
+    let hds = req.headers();
+    let default_origin = HeaderValue::from_static("*");
+    let default_req = HeaderValue::from_static("access-control-allow-origin,content-type");
+    let hd_origin = hds.get(header::ORIGIN).unwrap_or(&default_origin);
 
-                    }
-                    Json(ResponseOf::success(out))
-                } else {
-                    match result.status {
-                        ExecutionStatus::SpawnTimeout => Json(ResponseOf::non_success(RESP_CODE_EXECUTION_TIMEOUT)),
-                        _ => Json(ResponseOf::non_success(RESP_CODE_UNSUCCESSFUL_EXECUTION))
-                    }
-                }
-            } else {
-                // failed to even write the program file
-                Json(ResponseOf::non_success(RESP_CODE_UNSUCCESSFUL_EXECUTION))
+    Response::builder()
+        .header(header::ACCESS_CONTROL_ALLOW_ORIGIN, hd_origin)
+        .header(header::ACCESS_CONTROL_ALLOW_METHODS, "GET,HEAD,PUT,POST,DELETE")
+        .header(header::ACCESS_CONTROL_ALLOW_HEADERS, hds.get(header::ACCESS_CONTROL_REQUEST_HEADERS).unwrap_or(&default_req))
+}
+
+fn build_error_resp(builder: hyper::http::response::Builder) -> Response<BoxBody> {
+    builder
+        .status(StatusCode::OK)
+        .header(header::CONTENT_TYPE, "application/json")
+        .body(full(RESP_JSON_INTERNAL_ERROR))
+        .unwrap()
+}
+
+fn build_resp<T: ?Sized + Serialize>(builder: hyper::http::response::Builder, body: &T) -> Response<BoxBody> {
+    match serde_json::to_string(body) {
+        Ok(json) => builder
+            .status(StatusCode::OK)
+            .header(header::CONTENT_TYPE, "application/json")
+            .body(full(json))
+            .unwrap(),
+        Err(_) => build_error_resp(builder)
+    }
+}
+
+async fn handle_api(req: Request<Incoming>, env: Arc<Environment>) -> Result<Response<BoxBody>> {
+    let (method, path) = (req.method(), req.uri().path());
+    debug!("Request: {} {}", method, path);
+    match (method, path) {
+        (&Method::GET, "/") => Ok(build_resp(build_cors_resp(&req), &handle_server_info(&env))),
+        (&Method::POST, "/exec") => {
+            let cors_resp_builder = build_cors_resp(&req);
+            let req_body = req.collect().await?.to_bytes();
+            let exec_req = serde_json::from_slice(&req_body);
+            match exec_req {
+                Ok(exec_req) => {
+                    let result = handle_exec(&exec_req, &env).await;
+                    Ok(build_resp(cors_resp_builder, &result))
+                },
+                Err(_) => Ok(build_error_resp(cors_resp_builder))
             }
         },
+        (&Method::OPTIONS, _) => Ok(build_cors_resp(&req).status(StatusCode::NO_CONTENT).body(empty()).unwrap()),
+        _ => Ok(Response::builder().status(StatusCode::NOT_FOUND).body(full(NOTFOUND)).unwrap())
     }
 }
 
 #[tokio::main]
-async fn main() -> Result<(), std::io::Error> {
+async fn main() -> Result<()> {
     println!("* Cyclone Online Editor's Execution Server *");
-    println!("See {} for configurations", REPO_URL);
+    println!("See {} for documents", REPO_URL);
 
     let args = CliArgs::init();
     let env = Environment::initialize(&args);
@@ -86,17 +114,18 @@ async fn main() -> Result<(), std::io::Error> {
     let mut begin_range = false;
     let max_port = 9999;
     let min_port = 2000;
-    let acceptor = loop {
+
+    let listener = loop {
         if begin_range && port > max_port {
             error!("Failed to find a port to start a server.");
             return Err(error.unwrap());
         }
-        let listener = TcpListener::bind(format!("{host}:{port}"));
-        match listener.into_acceptor().await {
-            Ok(a) => break a,
-            Err(err) => error = Some(err),
-        };
-        // Most likely, another application is bound to this port.
+        let addr: SocketAddr = format!("{host}:{port}").as_str().parse().unwrap();
+        let listener = TcpListener::bind(&addr);
+        match listener.await {
+            Ok(l) => break l,
+            Err(e) => error = Some(e.into())
+        }
 
         if begin_range {
             port += 1;
@@ -127,28 +156,22 @@ async fn main() -> Result<(), std::io::Error> {
     );
 
     // since the url format is simple, there is no need to use a library to encode it
-    let url = format!("{}?set_exec_server=http%3A%2F%2F{host}%3A{port}", EDITOR_URL);
-    if !env.config.cyclone.silence_mode {
-        match open::that_detached(&url) {
-            Ok(_) => info!("Started a browser at {}", &url),
-            Err(_) => error!("Cannot start a browser at {} , visit it manually to enable this server", &url)
-        }
-    } else {
-        info!("Visit {} to automatically enable this server", &url)
-    }
+    let url = format!("{}?set_exec_server=http%3A%2F%2F{}%3A{}", EDITOR_URL, if host == "0.0.0.0" { "127.0.0.1" } else {&host}, port);
+    println!("* Connect to online editor: open a browser and visit:\n*\t{}\n", &url);
 
     let state = Arc::new(env);
-    let cors = Cors::new()
-        .allow_method(Method::GET)
-        .allow_method(Method::POST)
-        .allow_credentials(false)
-        .allow_origins_fn(|hd| true);
-    let app = Route::new()
-        .at("/", get(server_info))
-        .at("/exec", post(exec))
-        .with(cors)
-        .with(AddData::new(state));
-
-    Server::new_with_acceptor(acceptor).run(app).await?;
-    Ok(())
+    info!("Begin serving {}:{}", &host, port);
+    loop {
+        let (stream, _) = listener.accept().await?;
+        let io = TokioIo::new(stream);
+        let env = state.clone();
+        tokio::task::spawn(async move {
+            let service = service_fn(|req| {
+                handle_api(req, env.clone())
+            });
+            if let Err(e) = http1::Builder::new().serve_connection(io, service).await {
+                error!("Server Error: {:?}", e);
+            }
+        });
+    }
 }

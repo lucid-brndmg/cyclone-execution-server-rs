@@ -30,9 +30,9 @@ fn default_log_rotation() -> String {"never".to_string()}
 
 fn current_dir() -> String { ".".to_string() }
 
-fn is_valid_level(level: &str) -> bool {
-    return level == "debug" || level == "info" || level == "warn" || level == "error"
-}
+// fn is_valid_level(level: &str) -> bool {
+//     return level == "debug" || level == "info" || level == "warn" || level == "error"
+// }
 
 const ENV_PREFIX: &str = "CYCLONE_ES_";
 const ENV_PREFIX_LEN: usize = ENV_PREFIX.len();
@@ -361,6 +361,10 @@ impl Config {
 
         if args.no_color {
             self.logger.no_color = true
+        }
+
+        if args.no_env {
+            self.cyclone.append_env_path = false
         }
 
         if let Some(path) = args.cyclone_instance.first() {

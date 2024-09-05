@@ -7,6 +7,7 @@ pub const RESP_CODE_INVALID_OPTIONS: u8 = 3;
 pub const RESP_CODE_UNSUCCESSFUL_EXECUTION: u8 = 4;
 pub const RESP_CODE_INTERNAL_ERROR: u8 = 5;
 pub const RESP_CODE_EXECUTION_TIMEOUT: u8 = 6;
+pub const RESP_JSON_INTERNAL_ERROR: &str = "{\"code\":5}";
 // pub const RESP_CODE_ENQUEUED: u8 = 7;
 // pub const RESP_CODE_NOT_SUPPORTED: u8 = 8;
 // pub const RESP_CODE_NOT_FOUND: u8 = 9;
@@ -25,12 +26,12 @@ impl <T> ResponseOf<T> {
         }
     }
 
-    pub fn error() -> ResponseOf<T> {
-        ResponseOf {
-            code: RESP_CODE_INTERNAL_ERROR,
-            data: None
-        }
-    }
+    // pub fn error() -> ResponseOf<T> {
+    //     ResponseOf {
+    //         code: RESP_CODE_INTERNAL_ERROR,
+    //         data: None
+    //     }
+    // }
 
     pub fn non_success(code: u8) -> ResponseOf<T> {
         ResponseOf {

@@ -91,7 +91,7 @@ pub fn prepare_cyclone_env(path_to_cyclone_executable: &Path) -> Result<(), env:
         match path_to_cyclone_executable.parent() {
             Some(p) => {
                 let dir = PathBuf::from(p);
-                paths.push(dir);
+                paths.push(dir.clone());
                 let new_path = env::join_paths(paths)?;
                 unsafe {env::set_var("PATH", &new_path);}
 

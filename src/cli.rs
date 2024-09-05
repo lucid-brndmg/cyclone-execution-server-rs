@@ -30,6 +30,9 @@ pub struct CliArgs {
     #[options(no_short, help = "disable ANSI colors for logging")]
     pub no_color: bool,
 
+    #[options(no_short, help = "disable automatic setup [DY]LD_LIBRARY_PATH and append Cyclone directory to PATH")]
+    pub no_env: bool,
+
     #[options(free, help = "location of cyclone.jar")]
     pub cyclone_instance: Vec<String>,
 }

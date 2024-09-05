@@ -147,6 +147,7 @@ impl Environment {
             .take(id_length)
             .map(char::from)
             .collect();
+        info!("Begin execution: {}", &id);
         let filename = format!("{}{}", id, &self.config.cyclone.extension);
         let mut file = tokio::fs::File::create(&filename).await.ok()?;
         file.write_all(program.as_ref()).await.ok()?;
